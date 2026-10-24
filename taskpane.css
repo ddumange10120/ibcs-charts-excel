@@ -1,0 +1,93 @@
+:root {
+  --ink: #1a1a1a;
+  --ink-2: #4a4945;
+  --muted: #5f5e58;
+  --line: #d6d5cf;
+  --surface: #ffffff;
+  --surface-2: #f4f3ef;
+  --accent: #1f5fae;
+  --accent-ink: #ffffff;
+  --error: #a32020;
+  --error-bg: #fbe3e3;
+  --focus: #1f5fae;
+  --radius: 6px;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ink: #f1f0ec;
+    --ink-2: #cfcec8;
+    --muted: #b3b2ac;
+    --line: #4a4945;
+    --surface: #1e1e1d;
+    --surface-2: #2a2a28;
+    --accent: #6ea4ea;
+    --accent-ink: #0d1b2e;
+    --error: #ffb4b4;
+    --error-bg: #4a1c1c;
+    --focus: #8fbaf2;
+  }
+}
+:root[data-theme="dark"] {
+  --ink: #f1f0ec; --ink-2: #cfcec8; --muted: #b3b2ac; --line: #4a4945;
+  --surface: #1e1e1d; --surface-2: #2a2a28; --accent: #6ea4ea; --accent-ink: #0d1b2e;
+  --error: #ffb4b4; --error-bg: #4a1c1c; --focus: #8fbaf2;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--surface);
+  color: var(--ink);
+  font: 16px/1.45 "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+}
+main { padding: 12px 16px 24px; display: grid; gap: 18px; }
+h1 { font-size: 22px; margin: 0; }
+h2 { font-size: 17px; margin: 0 0 8px; }
+.lede, .hint, .source { color: var(--ink-2); margin: 4px 0 8px; }
+.hint { font-size: 15px; }
+form { display: grid; gap: 6px; }
+label { font-weight: 600; margin-top: 4px; }
+label.inline { font-weight: 400; display: flex; gap: 8px; align-items: center; margin: 4px 0; }
+input[type="text"], input[type="number"], select {
+  font: inherit;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+  width: 100%;
+  min-height: 36px;
+}
+fieldset { border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 12px 12px; margin: 6px 0 0; display: grid; gap: 4px; }
+legend { font-weight: 700; padding: 0 4px; }
+fieldset.grid { grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+fieldset.grid span { display: grid; gap: 2px; }
+button {
+  font: inherit;
+  font-weight: 600;
+  min-height: 40px;
+  padding: 8px 16px;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+button.primary { background: var(--accent); color: var(--accent-ink); border: 1px solid var(--accent); width: 100%; }
+button.secondary { background: var(--surface-2); color: var(--ink); border: 1px solid var(--line); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+:is(button, input, select):focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.preview {
+  background: #ffffff; /* the chart is printed on white in Excel too */
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 6px;
+  color: #1a1a1a;
+  min-height: 80px;
+  font-size: 15px;
+}
+.preview svg { width: 100%; height: auto; display: block; }
+.error { color: var(--error); background: var(--error-bg); padding: 8px 10px; border-radius: var(--radius); margin: 8px 0 0; }
+.status { color: var(--ink-2); margin: 8px 0; min-height: 1.4em; }
+.charts { list-style: none; padding: 0; margin: 0 0 8px; display: grid; gap: 6px; }
+.charts li { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.charts li button { min-height: 32px; padding: 4px 12px; background: var(--surface-2); color: var(--ink); border: 1px solid var(--line); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }

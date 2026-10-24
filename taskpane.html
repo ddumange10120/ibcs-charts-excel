@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Data never leaves the workbook: no fetch/XHR/websocket targets are allowed. -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self' https://appsforoffice.microsoft.com; style-src 'self'; img-src 'self' data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>IBCS Charts</title>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <link rel="stylesheet" href="taskpane.css">
+  <script type="module" src="addin/taskpane.js"></script>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>IBCS Charts</h1>
+      <p class="lede">Bridge chart (OP to outlook) with an axis break and a gap arrow.</p>
+    </header>
+
+    <section aria-labelledby="h-data">
+      <h2 id="h-data">1. Table</h2>
+      <p class="hint">Columns: <b>Label</b> · <b>Value</b> · <b>Type</b> (Plan, Actual, Forecast, Step) · <b>Group</b> (optional). Leave the last total blank to compute it.</p>
+      <button type="button" id="use-selection" class="secondary">Use selection</button>
+      <p id="source" class="source">No table selected yet.</p>
+    </section>
+
+    <form id="options" aria-labelledby="h-opts" novalidate>
+      <h2 id="h-opts">2. Chart</h2>
+      <label for="opt-title">Message title</label>
+      <input id="opt-title" type="text" placeholder="Generated from the data if empty" autocomplete="off">
+      <label for="opt-subtitle">Subtitle</label>
+      <input id="opt-subtitle" type="text" placeholder="Start to end, units" autocomplete="off">
+
+      <fieldset>
+        <legend>Orientation</legend>
+        <label class="inline"><input type="radio" name="orientation" value="horizontal" checked> Horizontal</label>
+        <label class="inline"><input type="radio" name="orientation" value="vertical"> Vertical</label>
+      </fieldset>
+
+      <fieldset class="grid">
+        <legend>Numbers</legend>
+        <span><label for="opt-prefix">Prefix</label><input id="opt-prefix" type="text" value="$" size="3"></span>
+        <span><label for="opt-suffix">Suffix</label><input id="opt-suffix" type="text" value="M" size="3"></span>
+        <span><label for="opt-decimals">Decimals</label><input id="opt-decimals" type="number" min="0" max="4" step="1" value="1"></span>
+        <span><label for="opt-scale">Cells hold</label>
+          <select id="opt-scale">
+            <option value="1" selected>Display units</option>
+            <option value="1000">Units, show thousands</option>
+            <option value="1000000">Units, show millions</option>
+          </select></span>
+      </fieldset>
+
+      <fieldset>
+        <legend>Colour and checks</legend>
+        <label class="inline"><input id="opt-higher" type="checkbox" checked> Higher is better (untick for cost bridges)</label>
+        <label for="opt-materiality">Grey below (% of start total)</label>
+        <input id="opt-materiality" type="number" min="0" max="100" step="0.5" value="1">
+        <label for="opt-break">Axis break</label>
+        <select id="opt-break">
+          <option value="auto" selected>Automatic</option>
+          <option value="on">Always</option>
+          <option value="off">Never (start at zero)</option>
+        </select>
+        <label class="inline"><input id="opt-gap" type="checkbox" checked> Gap arrow between first and last total</label>
+      </fieldset>
+
+      <label for="opt-mode">Picture format</label>
+      <select id="opt-mode">
+        <option value="auto" selected>Automatic</option>
+        <option value="svg">Vector (SVG)</option>
+        <option value="png">Image (PNG)</option>
+      </select>
+    </form>
+
+    <section aria-labelledby="h-prev">
+      <h2 id="h-prev">3. Preview</h2>
+      <div id="preview" class="preview">No table selected yet.</div>
+      <p id="error" class="error" role="alert" hidden></p>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+      <button type="button" id="insert" class="primary" disabled>Insert chart</button>
+    </section>
+
+    <section aria-labelledby="h-list">
+      <h2 id="h-list">Charts in this workbook</h2>
+      <ul id="charts" class="charts"></ul>
+      <button type="button" id="refresh-all" class="secondary" disabled>Refresh all charts</button>
+    </section>
+  </main>
+</body>
+</html>

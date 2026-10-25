@@ -11,10 +11,12 @@ export function renderChart(type, values, options, width) {
         const p = parseColumns(values, options);
         if (!p.ok)
             return p;
-        return { ok: true, result: renderColumns(p.model, width === undefined ? {} : { width }), warnings: p.model.warnings };
+        const result = renderColumns(p.model, width === undefined ? {} : { width });
+        return { ok: true, result, warnings: [...p.model.warnings, ...(result.warnings ?? [])], labels: p.model.periods.map((x) => x.label) };
     }
     const p = parseBridge(values, options);
     if (!p.ok)
         return p;
-    return { ok: true, result: renderBridge(p.model, width === undefined ? {} : { width }), warnings: p.model.warnings };
+    const result = renderBridge(p.model, width === undefined ? {} : { width });
+    return { ok: true, result, warnings: [...p.model.warnings, ...(result.warnings ?? [])], labels: p.model.rows.map((x) => x.label) };
 }

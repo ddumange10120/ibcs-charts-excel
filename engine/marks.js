@@ -3,7 +3,7 @@
  * everywhere (IBCS "Unify"): same fonts, same scenario fills, same exception colours.
  */
 import { THEME, hatchLines, rect, text } from "./svg.js";
-import { wrapText } from "./text.js";
+import { textWidth, wrapText } from "./text.js";
 /** Font sizes in px at the 960 px design width. Large on purpose: these are read on screens and slides. */
 export const F = {
     title: 26,
@@ -79,4 +79,17 @@ export function clampLabel(lines, max) {
     const kept = lines.slice(0, max);
     kept[max - 1] = `${kept[max - 1]}…`;
     return kept;
+}
+/**
+ * A label on a white box, so lines that pass behind it (leaders, extension lines) never
+ * run through the text. `baseline` is the text baseline.
+ */
+export function labelBox(x, baseline, content, size, bold = true, anchor = "middle", fill = THEME.ink) {
+    const w = textWidth(content, size, bold) + 12;
+    const left = anchor === "middle" ? x - w / 2 : anchor === "start" ? x - 6 : x - w + 6;
+    return [rect(left, baseline - size * 0.82 - 5, w, size + 9, { fill: THEME.surface }), text(x, baseline, content, { size, bold, anchor, fill })];
+}
+/** Colour for an annotation line: exception colours, but dark grey (not pale grey) when within tolerance. */
+export function annotationColour(t) {
+    return t === "neutral" ? THEME.ink2 : toneColour(t);
 }

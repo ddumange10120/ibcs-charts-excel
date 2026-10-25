@@ -5,6 +5,7 @@
  * Pure functions only: no DOM, no Office.js. Rendering lives in render.ts.
  */
 import { toleranceError, toneOf } from "./marks.js";
+import { resolveAnnotations } from "./annotations.js";
 export { toneOf } from "./marks.js";
 export const DEFAULT_OPTIONS = {
     orientation: "horizontal",
@@ -18,6 +19,7 @@ export const DEFAULT_OPTIONS = {
     materialityPct: 1,
     breakAxis: "auto",
     showGapArrow: true,
+    annotations: [],
 };
 const KIND_SYNONYMS = {
     plan: "plan", pl: "plan", budget: "plan", bu: "plan", op: "plan", target: "plan",
@@ -197,8 +199,45 @@ export function parseBridge(values, partial = {}) {
         g.tone = toneOf(g.sum, threshold, options.higherIsBetter);
     const levels = rows.flatMap((r) => (r.kind === "step" ? [r.from, r.to] : [r.to]));
     const window = chooseWindow(levels, options.breakAxis);
-    // IBCS "Check" on screen: do the rounded step labels add up to the rounded gap?
     const warnings = [];
+    // Difference arrows: the gap arrow (first to last total), then any annotation arrows.
+    const levelOf = (k) => rows[k].to;
+    const diffs = [];
+    const makeDiff = (i, j, text, isGap, label) => {
+        const a = levelOf(i);
+        const b = levelOf(j);
+        const d = b - a;
+        const pct = a === 0 ? null : (d / Math.abs(a)) * 100;
+        diffs.push({
+            from: i, to: j, a, b, delta: d, pct, tone: toneOf(d, threshold, options.higherIsBetter), text: text(d, pct),
+            label, valueText: formatValue(d, options, true), pctText: pct === null ? null : `(${formatPct(pct)})`, isGap,
+        });
+    };
+    if (options.showGapArrow && gap !== 0) {
+        makeDiff(0, rows.length - 1, (d, pct) => `${formatValue(d, options, true)} (${formatPct(pct ?? 0)}) vs ${start.label}`, true, null);
+    }
+    const ann = resolveAnnotations(options.annotations, rows.map((r) => r.label), "row");
+    warnings.push(...ann.warnings);
+    for (const a of ann.resolved) {
+        if (a.spec.type === "diff") {
+            makeDiff(a.i, a.j, (d, pct) => {
+                const num = `${formatValue(d, options, true)}${pct === null ? "" : ` (${formatPct(pct)})`}`;
+                return a.spec.label ? `${a.spec.label}: ${num}` : `${num} ${rows[a.j].label} vs ${rows[a.i].label}`;
+            }, false, a.spec.label ?? `${rows[a.j].label} vs ${rows[a.i].label}`);
+        }
+        else {
+            const lo = Math.min(a.i, a.j);
+            const hi = Math.max(a.i, a.j);
+            const span = rows.slice(lo, hi + 1);
+            if (span.some((r) => r.kind !== "step")) {
+                warnings.push(`Annotation ${a.n} (bracket ${a.spec.from} \u2192 ${a.spec.to}) includes a total; a bridge bracket must cover steps only, so it was left out.`);
+                continue;
+            }
+            const sum = span.reduce((acc, r) => acc + r.value, 0);
+            groups.push({ label: a.spec.label ?? `${rows[lo].label} to ${rows[hi].label}`, first: lo, last: hi, sum, tone: toneOf(sum, threshold, options.higherIsBetter), annotation: true });
+        }
+    }
+    // IBCS "Check" on screen: do the rounded step labels add up to the rounded gap?
     const stepLabelSum = rows.filter((r) => r.kind === "step").reduce((s, r) => s + roundTo(r.value, decimals), 0);
     const shownGap = roundTo(end.value, decimals) - roundTo(start.value, decimals);
     if (Math.abs(stepLabelSum - shownGap) > 10 ** -(decimals + 3)) {
@@ -206,7 +245,7 @@ export function parseBridge(values, partial = {}) {
     }
     return {
         ok: true,
-        model: { rows, groups, start, end, gap, gapPct, gapTone: toneOf(gap, threshold, options.higherIsBetter), window, options, warnings },
+        model: { rows, groups, diffs, start, end, gap, gapPct, gapTone: toneOf(gap, threshold, options.higherIsBetter), window, options, warnings },
     };
 }
 /** "+$0.4M", "−$1.3M", "$36.0M". Uses the true minus sign. */

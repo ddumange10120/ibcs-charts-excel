@@ -94,6 +94,24 @@
         <label class="inline"><input id="opt-bars" type="checkbox" checked> ΔPL bars</label>
       </fieldset>
 
+      <fieldset aria-describedby="ann-hint">
+        <legend>Arrows and brackets</legend>
+        <small id="ann-hint" class="hint">Difference arrow between any two bars, or a bracket with the subtotal of a run of bars. They follow the bar names, so they survive edits.</small>
+        <ul id="ann-list" class="charts" aria-label="Annotations on this chart"></ul>
+        <label for="ann-type">Add</label>
+        <select id="ann-type">
+          <option value="diff" selected>Difference arrow</option>
+          <option value="bracket">Bracket (subtotal)</option>
+        </select>
+        <span class="grid2">
+          <span class="stack"><label for="ann-from">From</label><select id="ann-from"></select></span>
+          <span class="stack"><label for="ann-to">To</label><select id="ann-to"></select></span>
+        </span>
+        <label for="ann-label">Label (optional)</label>
+        <input id="ann-label" type="text" placeholder="e.g. Q3, or Dec vs Jan" autocomplete="off">
+        <button type="button" id="ann-add" class="secondary">Add to chart</button>
+      </fieldset>
+
       <label for="opt-mode">Picture format</label>
       <select id="opt-mode">
         <option value="auto" selected>Automatic</option>

@@ -10,6 +10,7 @@
  */
 import { toleranceError, toneOf } from "./marks.js";
 import { roundTo } from "./bridge.js";
+import { resolveAnnotations } from "./annotations.js";
 export const DEFAULT_COLUMN_OPTIONS = {
     title: "",
     subtitle: "",
@@ -23,6 +24,7 @@ export const DEFAULT_COLUMN_OPTIONS = {
     axisMax: 0,
     showPctPins: true,
     showVarianceBars: true,
+    annotations: [],
 };
 const ROLE = {
     ac: "ac", act: "ac", actual: "ac", actuals: "ac",
@@ -56,6 +58,10 @@ function pctTone(pct, o) {
     if (pct === null || Math.abs(pct) <= o.materialityPct)
         return "neutral";
     return toneOf(pct, 0, o.higherIsBetter);
+}
+/** Exported for the renderer: tone of a % difference under the chart's tolerance. */
+export function pctToneOf(pct, o) {
+    return pctTone(pct, o);
 }
 export function parseColumns(values, partial = {}) {
     const options = { ...DEFAULT_COLUMN_OPTIONS, ...partial };
@@ -147,6 +153,8 @@ export function parseColumns(values, partial = {}) {
             warnings.push(`Rounded ΔPL labels add up to ${shown.toFixed(options.decimals)}, the total ΔPL is ${delta.toFixed(options.decimals)}. Show one more decimal if that matters.`);
         }
     }
+    const ann = resolveAnnotations(options.annotations, periods.map((p) => p.label), "period");
+    warnings.push(...ann.warnings);
     return {
         ok: true,
         model: {
@@ -154,6 +162,7 @@ export function parseColumns(values, partial = {}) {
             hasPlan,
             totals: { value, plan, delta, deltaPct, tone: pctTone(deltaPct, options) },
             firstForecast: periods.findIndex((p) => p.kind === "forecast"),
+            annotations: ann.resolved,
             options,
             warnings,
         },

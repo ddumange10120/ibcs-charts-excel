@@ -94,3 +94,5 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 [hidden] { display: none !important; }
 .stack { display: grid; gap: 4px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.hint { display: block; }

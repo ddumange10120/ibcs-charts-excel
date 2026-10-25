@@ -2,7 +2,7 @@
  * Task pane controller: pick a chart type, select a table -> preview -> insert/update a picture.
  * While the pane is open, charts re-render when their table changes.
  */
-import { renderChart } from "../engine/index.js";
+import { MAX_ANNOTATIONS, renderChart } from "../engine/index.js";
 import { bindAddress, deleteBinding, loadRecords, placeChart, pxToPt, readBinding, readSelection, resolveMode, saveRecords, vectorSupported, watchBinding, watchCalculation, } from "./excel.js";
 const $ = (id) => {
     const el = document.getElementById(id);
@@ -31,6 +31,12 @@ const ui = {
     axisMax: $("opt-axis-max"),
     pins: $("opt-pins"),
     bars: $("opt-bars"),
+    annList: $("ann-list"),
+    annType: $("ann-type"),
+    annFrom: $("ann-from"),
+    annTo: $("ann-to"),
+    annLabel: $("ann-label"),
+    annAdd: $("ann-add"),
     mode: $("opt-mode"),
     preview: $("preview"),
     status: $("status"),
@@ -40,7 +46,7 @@ const ui = {
     charts: $("charts"),
     form: $("options"),
 };
-const state = { values: null, address: "", editingId: null, last: null, hashes: new Map(), watched: new Set() };
+const state = { values: null, address: "", editingId: null, last: null, hashes: new Map(), watched: new Set(), annotations: [], labels: [] };
 /** An empty or non-numeric box must fail validation, never silently become 0. */
 function tolerance(el) {
     return el.value.trim() === "" || el.validity.badInput ? Number.NaN : Number(el.value);
@@ -58,6 +64,7 @@ function readOptions() {
     const type = chartType();
     const common = {
         chartType: type,
+        annotations: state.annotations.map((a) => ({ ...a })),
         title: ui.title.value,
         subtitle: ui.subtitle.value,
         decimals: Number(ui.decimals.value),
@@ -99,6 +106,8 @@ function writeOptions(o) {
     const type = o["chartType"] === "columns" ? "columns" : "bridge";
     ui.chartType.value = type;
     showFieldsFor(type);
+    state.annotations = Array.isArray(o["annotations"]) ? o["annotations"].map((a) => ({ ...a })) : [];
+    renderAnnotations();
     set(ui.title, o["title"]);
     set(ui.subtitle, o["subtitle"]);
     set(ui.decimals, o["decimals"]);
@@ -150,8 +159,49 @@ function render(values, options) {
     const type = options["chartType"] === "columns" ? "columns" : "bridge";
     const out = renderChart(type, values, options);
     if (!out.ok)
-        return { result: null, error: out.error, warnings: [] };
-    return { result: out.result, error: "", warnings: out.warnings };
+        return { result: null, error: out.error, warnings: [], labels: [] };
+    return { result: out.result, error: "", warnings: out.warnings, labels: out.labels };
+}
+/* ---------------- annotations ---------------- */
+function fillSelect(sel, labels, keep) {
+    sel.replaceChildren(...labels.map((l) => new Option(l, l)));
+    if (labels.includes(keep))
+        sel.value = keep;
+}
+function renderAnnotations() {
+    ui.annList.replaceChildren();
+    state.annotations.forEach((a, k) => {
+        const li = document.createElement("li");
+        const name = document.createElement("span");
+        name.textContent = `${a.type === "diff" ? "Arrow" : "Bracket"}: ${a.from} \u2192 ${a.to}${a.label ? ` (${a.label})` : ""}`;
+        const rm = document.createElement("button");
+        rm.type = "button";
+        rm.textContent = "Remove";
+        rm.setAttribute("aria-label", `Remove ${name.textContent}`);
+        rm.addEventListener("click", () => {
+            state.annotations.splice(k, 1);
+            renderAnnotations();
+            updatePreview();
+        });
+        li.append(name, rm);
+        ui.annList.append(li);
+    });
+    ui.annAdd.disabled = state.labels.length < 2 || state.annotations.length >= MAX_ANNOTATIONS;
+}
+function addAnnotation() {
+    const from = ui.annFrom.value;
+    const to = ui.annTo.value;
+    if (!from || !to || from === to) {
+        fail("Pick two different bars for the arrow or bracket.");
+        return;
+    }
+    const label = ui.annLabel.value.trim();
+    state.annotations.push({ type: ui.annType.value === "bracket" ? "bracket" : "diff", from, to, ...(label ? { label } : {}) });
+    ui.annLabel.value = "";
+    renderAnnotations();
+    updatePreview();
+    if (state.editingId)
+        say("Added. Click Update chart to put it on the sheet.");
 }
 function updatePreview() {
     if (!state.values) {
@@ -159,8 +209,14 @@ function updatePreview() {
         ui.insert.disabled = true;
         return;
     }
-    const { result, error, warnings } = render(state.values, readOptions());
+    const { result, error, warnings, labels } = render(state.values, readOptions());
     state.last = result;
+    if (labels.length) {
+        state.labels = labels;
+        fillSelect(ui.annFrom, labels, ui.annFrom.value || labels[0]);
+        fillSelect(ui.annTo, labels, ui.annTo.value || labels[labels.length - 1]);
+    }
+    renderAnnotations();
     fail(error);
     if (!result) {
         ui.preview.textContent = "Fix the table to see the chart.";
@@ -188,7 +244,7 @@ async function svgToPngBase64(svg, width, height) {
     return canvas.toDataURL("image/png").split(",")[1] ?? "";
 }
 async function drawRecord(rec, values) {
-    const { result, error } = render(values, rec.options);
+    const { result, error, warnings } = render(values, rec.options);
     if (!result)
         throw new Error(`Chart not updated. ${error}`);
     const mode = await placeChart(rec, {
@@ -199,7 +255,7 @@ async function drawRecord(rec, values) {
         altTitle: result.title,
         altText: result.description,
     });
-    return mode;
+    return { mode, warnings };
 }
 /* ---------------- live refresh ---------------- */
 const timers = new Map();
@@ -223,10 +279,10 @@ async function refreshOne(id, force) {
             fail("");
             return;
         }
-        await drawRecord(rec, data.values);
+        const drawn = await drawRecord(rec, data.values);
         state.hashes.set(id, hash);
         fail("");
-        say(`Updated chart from ${data.address}.`);
+        say(`Updated chart from ${data.address}.${drawn.warnings.length ? ` Check: ${drawn.warnings.join(" ")}` : ""}`);
         if (state.editingId === id) {
             state.values = data.values;
             state.address = data.address;
@@ -290,6 +346,7 @@ async function useSelection() {
         state.values = sel.values;
         state.address = sel.address;
         state.editingId = null;
+        state.annotations = [];
         ui.source.textContent = `Table: ${sel.address}`;
         ui.insert.textContent = "Insert chart";
         updatePreview();
@@ -311,8 +368,11 @@ async function insertOrUpdate() {
             widthPt: pxToPt(state.last.width),
         };
         let mode;
+        let drawnWarnings = [];
         try {
-            mode = await drawRecord(rec, state.values);
+            const drawn = await drawRecord(rec, state.values);
+            mode = drawn.mode;
+            drawnWarnings = drawn.warnings;
         }
         catch (e) {
             if (isNew)
@@ -327,7 +387,7 @@ async function insertOrUpdate() {
         await watch(id);
         renderList();
         fail("");
-        say(`Chart ${mode === "svg" ? "inserted as a vector picture" : "inserted as a PNG picture"}. It updates while this pane is open; save the workbook to keep the link.`);
+        say(`Chart ${mode === "svg" ? "inserted as a vector picture" : "inserted as a PNG picture"}. It updates while this pane is open; save the workbook to keep the link.${drawnWarnings.length ? ` Check: ${drawnWarnings.join(" ")}` : ""}`);
     });
 }
 async function refreshAll() {
@@ -342,8 +402,12 @@ ui.form.addEventListener("input", () => {
 });
 ui.form.addEventListener("submit", (e) => e.preventDefault());
 ui.useSelection.addEventListener("click", () => void useSelection());
+ui.annAdd.addEventListener("click", addAnnotation);
 ui.chartType.addEventListener("change", () => {
     showFieldsFor(chartType());
+    // Bar names differ between chart types, so annotations do not carry over.
+    state.annotations = [];
+    state.labels = [];
     if (state.editingId) {
         // Changing the type of an existing chart would rebind its meaning; start a new chart instead.
         state.editingId = null;

@@ -7,10 +7,11 @@
  *   main  AC solid / FC hatched columns, PL as an outlined column behind (or a tick)
  * Colour marks exceptions only: red adverse, blue favourable beyond ±materiality, grey within.
  */
-import {} from "./columns.js";
+import { pctToneOf } from "./columns.js";
+import { assignLanes } from "./annotations.js";
 import { formatPct, roundTo } from "./bridge.js";
-import { F, PAD, clampLabel, header, scenarioBar, tolerancePct, toneColour } from "./marks.js";
-import { THEME, esc, line, rect, text } from "./svg.js";
+import { F, PAD, annotationColour, clampLabel, header, labelBox, scenarioBar, tolerancePct, toneColour } from "./marks.js";
+import { THEME, arrowhead, esc, line, polyline, rect, text } from "./svg.js";
 import { textWidth, wrapText } from "./text.js";
 const num = (v, d, signed = false) => {
     const r = roundTo(v, d);
@@ -168,11 +169,120 @@ export function renderColumns(m, r = {}) {
         });
         panelLabel(zeroY, "ΔPL");
     }
+    // ---- annotation band: between the variance panels and the columns, so arrows and
+    // brackets never cross a panel, the legend or a value label. Lanes stack upwards.
+    const annTop = (barsOn ? barBottom : pinsOn ? pinBottom : y) + 4;
+    const annSize = F.note + 1;
+    const warnings = [];
+    const anns = m.annotations.map((a) => {
+        const lo = Math.min(a.i, a.j);
+        const hi = Math.max(a.i, a.j);
+        let txt;
+        let tone = "neutral";
+        let xa;
+        let xb;
+        if (a.spec.type === "diff") {
+            const pa = m.periods[a.i];
+            const pb = m.periods[a.j];
+            const d = pb.value - pa.value;
+            const pct = pa.value === 0 ? null : (d / Math.abs(pa.value)) * 100;
+            tone = pctToneOf(pct, o);
+            txt = `${a.spec.label ?? `${pb.label} vs ${pa.label}`}: ${num(d, o.decimals, true)}${pct === null ? "" : ` (${formatPct(pct)})`}`;
+            xa = centre(a.i);
+            xb = centre(a.j);
+        }
+        else {
+            const run = m.periods.slice(lo, hi + 1);
+            const sum = run.reduce((acc, p) => acc + p.value, 0);
+            const plan = run.every((p) => p.plan !== null) ? run.reduce((acc, p) => acc + p.plan, 0) : null;
+            const pct = plan === null || plan === 0 ? null : ((sum - plan) / Math.abs(plan)) * 100;
+            txt = `${a.spec.label ?? `${run[0].label}\u2013${run[run.length - 1].label}`}: ${num(sum, o.decimals)}${pct === null ? "" : ` (${formatPct(pct)} vs PL)`}`;
+            xa = colX(lo) - 2;
+            xb = colX(hi) + groupW + 2;
+        }
+        const lw = textWidth(txt, annSize, true) + 12;
+        const cx = Math.min(width - PAD - lw / 2, Math.max(PAD + lw / 2, (xa + xb) / 2));
+        return { a, txt, tone, xa, xb, cx, span: { lo: Math.min(xa, xb, cx - lw / 2), hi: Math.max(xa, xb, cx + lw / 2) } };
+    });
+    const order = anns.map((_, k) => k).sort((p, q) => anns[p].span.hi - anns[p].span.lo - (anns[q].span.hi - anns[q].span.lo));
+    const laneSorted = assignLanes(order.map((k) => anns[k].span), 4, 12); // MAX_LANES
+    const lane = new Array(anns.length).fill(null);
+    order.forEach((k, idx) => (lane[k] = laneSorted[idx]));
+    lane.forEach((l, k) => {
+        if (l === null)
+            warnings.push(`No room for annotation ${anns[k].a.n} (${anns[k].txt}); it was left out. Remove one or use fewer overlapping annotations.`);
+    });
+    // Leaders of arrows in higher lanes drop through the lanes below, and a label box there
+    // would hide them. Fix each conflict by (1) sliding the box sideways, staying over its own
+    // line, or (2) moving that annotation up above the arrow whose leader it hits. Warn if neither works.
+    const MAX_LANES = 4;
+    const boxW = anns.map((an) => textWidth(an.txt, annSize, true) + 12);
+    const spanAt = (k, cx) => {
+        const an = anns[k];
+        return { lo: Math.min(an.xa, an.xb, cx - boxW[k] / 2), hi: Math.max(an.xa, an.xb, cx + boxW[k] / 2) };
+    };
+    const fits = (k, l, sp) => anns.every((_, k2) => k2 === k || lane[k2] !== l || sp.hi + 12 <= anns[k2].span.lo || sp.lo >= anns[k2].span.hi + 12);
+    const leadersAbove = (l) => anns.flatMap((o2, k2) => {
+        const l2 = lane[k2];
+        return l2 !== null && l2 !== undefined && l2 > l && o2.a.spec.type === "diff" ? [{ x: o2.xa, lane: l2 }, { x: o2.xb, lane: l2 }] : [];
+    });
+    const hits = (k, cx, l) => leadersAbove(l).filter((ld) => ld.x >= cx - boxW[k] / 2 - 8 && ld.x <= cx + boxW[k] / 2 + 8);
+    const unresolved = new Set();
+    for (let pass = 0; pass < 12; pass++) {
+        let moved = false;
+        unresolved.clear();
+        for (let k = 0; k < anns.length; k++) {
+            const l = lane[k];
+            if (l === null || l === undefined)
+                continue;
+            const an = anns[k];
+            const hit = hits(k, an.cx, l);
+            if (!hit.length)
+                continue;
+            // (1) slide
+            const lo = Math.min(an.xa, an.xb);
+            const hi = Math.max(an.xa, an.xb);
+            const slide = leadersAbove(l)
+                .flatMap((ld) => [ld.x - 8 - boxW[k] / 2 - 1, ld.x + 8 + boxW[k] / 2 + 1])
+                .filter((cx) => cx >= lo && cx <= hi && cx - boxW[k] / 2 >= PAD && cx + boxW[k] / 2 <= width - PAD)
+                .filter((cx) => !hits(k, cx, l).length && fits(k, l, spanAt(k, cx)))
+                .sort((p1, p2) => Math.abs(p1 - an.cx) - Math.abs(p2 - an.cx));
+            if (slide.length) {
+                an.cx = slide[0];
+                an.span = spanAt(k, an.cx);
+                continue;
+            }
+            // (2) move above the highest arrow it collides with
+            const above = Math.max(...hit.map((h) => h.lane)) + 1;
+            let target = null;
+            for (let l2 = above; l2 < MAX_LANES; l2++)
+                if (fits(k, l2, an.span)) {
+                    target = l2;
+                    break;
+                }
+            if (target !== null) {
+                lane[k] = target;
+                moved = true;
+                break;
+            }
+            unresolved.add(k);
+        }
+        if (!moved)
+            break;
+    }
+    for (const k of unresolved) {
+        warnings.push(`The label of annotation ${anns[k].a.n} (${anns[k].txt}) overlaps another arrow's line; there was no free spot. Remove an annotation if it reads badly.`);
+    }
+    const lanes = Math.max(0, ...lane.map((l) => (l === null ? -1 : l + 1)));
+    const laneH = 40;
+    const bandH = lanes ? lanes * laneH + 6 : 0;
+    const laneY = (l) => annTop + bandH - 22 - l * laneH;
     // ---- main chart
-    const mainTop = (barsOn ? barBottom : pinsOn ? pinBottom : y) + labelSize + 14;
+    const mainTop = annTop - 4 + bandH + labelSize + 14;
     const yv = (v) => mainTop + (vMax - v) * ppuMain;
     const zero = yv(0);
     const mainMarks = [];
+    const clearTop = []; // highest ink above each column (value label, column or plan), for annotation leaders
     m.periods.forEach((p, i) => {
         const xa = colX(i);
         if (p.plan !== null && o.planStyle === "column") {
@@ -189,6 +299,7 @@ export function renderColumns(m, r = {}) {
         // Label above whichever is taller, AC/FC or the plan behind it, so it never sits on the plan outline.
         const vy = p.value >= 0 ? Math.min(top, p.plan !== null ? yv(Math.max(0, p.plan)) : top) - 8 : yv(p.value) + labelSize + 4;
         mainMarks.push(text(centre(i), vy, num(p.value, o.decimals), { size: labelSize, anchor: "middle" }));
+        clearTop[i] = Math.min(top, p.plan !== null ? yv(Math.max(0, p.plan)) : top, p.value >= 0 ? vy - labelSize : top) - 6;
     });
     mainMarks.push(line(x0, zero, x1, zero, { stroke: THEME.axis, "stroke-width": 2 }));
     const mainBottom = yv(Math.min(0, dataMin));
@@ -199,6 +310,30 @@ export function renderColumns(m, r = {}) {
         body.push(line(sx, y + 4, sx, mainBottom + 4, { stroke: THEME.extension, "stroke-width": 1.4, "stroke-dasharray": "5 4" }));
     }
     body.push(...pinMarks, ...barMarks, ...mainMarks);
+    // ---- annotations: lines first, label boxes last (so a leader passing behind a label never runs through its text)
+    const annBoxes = [];
+    anns.forEach((an, k) => {
+        const l = lane[k];
+        if (l === null || l === undefined)
+            return;
+        const ly = laneY(l);
+        if (an.a.spec.type === "diff") {
+            const c = annotationColour(an.tone);
+            const yA = clearTop[an.a.i];
+            const yB = clearTop[an.a.j];
+            body.push(line(an.xa, ly, an.xa, yA, { stroke: c, "stroke-width": 2 }));
+            body.push(line(an.xa, ly, an.xb, ly, { stroke: c, "stroke-width": 2 }));
+            body.push(line(an.xb, ly, an.xb, yB - 10, { stroke: c, "stroke-width": 2 }));
+            body.push(arrowhead(an.xb, yB, 0, 1, 12, c));
+            annBoxes.push(...labelBox(an.cx, ly + annSize * 0.35, an.txt, annSize));
+        }
+        else {
+            // Bracket: the line sits under its label, so a label wider than the bracket can never hide it.
+            body.push(polyline([[an.xa, ly + 18], [an.xa, ly + 9], [an.xb, ly + 9], [an.xb, ly + 18]], { stroke: THEME.ink2, "stroke-width": 2 }));
+            annBoxes.push(...labelBox(an.cx, ly + 1, an.txt, annSize));
+        }
+    });
+    body.push(...annBoxes);
     // ---- period labels
     let catBottom = mainBottom;
     const catSize = Math.min(F.category - 2, labelSize);
@@ -227,5 +362,5 @@ export function renderColumns(m, r = {}) {
         rect(0, 0, width, height, { fill: THEME.surface }) +
         body.join("") +
         `</svg>`;
-    return { svg, width, height, description, title };
+    return { svg, width, height, description, title, warnings };
 }

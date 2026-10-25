@@ -24,8 +24,10 @@
       <select id="opt-type">
         <option value="bridge" selected>Bridge (plan to outlook)</option>
         <option value="columns">Columns with variances (by period)</option>
+        <option value="multiples">Small multiples (one panel per entity)</option>
       </select>
       <p class="hint" data-chart="bridge">Columns: <b>Label</b> · <b>Value</b> · <b>Type</b> (Plan, Actual, Forecast, Step) · <b>Group</b> (optional). Leave the last total blank to compute it.</p>
+      <p class="hint" data-chart="multiples" hidden>Long table, header row required: <b>Entity</b> (Channel, Market…) · <b>Period</b> · <b>AC</b> · <b>FC</b> · <b>PL</b>. One panel per entity (2 to 9), all on the same scale.</p>
       <p class="hint" data-chart="columns" hidden>One row per period: <b>Period</b> · <b>AC</b> · <b>FC</b> · <b>PL</b>. Fill AC for past periods and FC for future ones (never both). PL is optional but needed for variances.</p>
       <button type="button" id="use-selection" class="secondary">Use selection</button>
       <p id="source" class="source">No table selected yet.</p>
@@ -48,7 +50,7 @@
         <legend>Numbers</legend>
         <span data-chart="bridge"><label for="opt-prefix">Prefix</label><input id="opt-prefix" type="text" value="$" size="3"></span>
         <span data-chart="bridge"><label for="opt-suffix">Suffix</label><input id="opt-suffix" type="text" value="M" size="3"></span>
-        <span data-chart="columns" hidden><label for="opt-units">Units (in subtitle)</label><input id="opt-units" type="text" value="$M" size="5"></span>
+        <span data-chart="columns multiples" hidden><label for="opt-units">Units (in subtitle)</label><input id="opt-units" type="text" value="$M" size="5"></span>
         <span><label for="opt-decimals">Decimals</label><input id="opt-decimals" type="number" min="0" max="4" step="1" value="1"></span>
         <span><label for="opt-scale">Cells hold</label>
           <select id="opt-scale">
@@ -64,7 +66,7 @@
         <span data-chart="bridge" class="stack"><label for="opt-materiality">Tolerance ±%</label>
         <input id="opt-materiality" type="number" min="0" max="50" step="0.1" value="1" inputmode="decimal" aria-describedby="tol-hint-bridge">
         <small id="tol-hint-bridge" class="hint">Steps within ± this % of the start total stay grey. 0 to 50; 0 colours every step.</small></span>
-        <span data-chart="columns" class="stack" hidden><label for="opt-col-materiality">Tolerance ±%</label>
+        <span data-chart="columns multiples" class="stack" hidden><label for="opt-col-materiality">Tolerance ±%</label>
         <input id="opt-col-materiality" type="number" min="0" max="50" step="0.1" value="2" inputmode="decimal" aria-describedby="tol-hint-columns">
         <small id="tol-hint-columns" class="hint">Variances within ± this % of plan stay grey. 0 to 50; 0 colours every variance.</small></span>
         <span data-chart="bridge" class="stack"><label for="opt-break">Axis break</label>
@@ -76,7 +78,7 @@
         <label class="inline" data-chart="bridge"><input id="opt-gap" type="checkbox" checked> Gap arrow between first and last total</label>
       </fieldset>
 
-      <fieldset data-chart="columns" hidden>
+      <fieldset data-chart="columns multiples" hidden>
         <legend>Columns</legend>
         <label for="opt-plan-style">Plan shown as</label>
         <select id="opt-plan-style">
@@ -90,11 +92,17 @@
         </select>
         <label for="opt-axis-max">Axis maximum (0 = automatic)</label>
         <input id="opt-axis-max" type="number" min="0" step="any" value="0">
+        <label class="inline"><input id="opt-total" type="checkbox"> Total column (axis broken)</label>
+        <label for="opt-total-label">Total column name</label>
+        <input id="opt-total-label" type="text" value="FY" size="8" autocomplete="off">
+        <span data-chart="columns" class="stack" hidden><label for="opt-scale-name">Shared scale name (optional)</label>
+        <input id="opt-scale-name" type="text" placeholder="e.g. Markets $M" autocomplete="off" aria-describedby="scale-hint">
+        <small id="scale-hint" class="hint">Charts with the same name use one scale, so bar lengths compare across them. Each shows the same grey scale bar.</small></span>
         <label class="inline"><input id="opt-pins" type="checkbox" checked> ΔPL% pins</label>
         <label class="inline"><input id="opt-bars" type="checkbox" checked> ΔPL bars</label>
       </fieldset>
 
-      <fieldset aria-describedby="ann-hint">
+      <fieldset aria-describedby="ann-hint" data-chart="bridge columns">
         <legend>Arrows and brackets</legend>
         <small id="ann-hint" class="hint">Difference arrow between any two bars, or a bracket with the subtotal of a run of bars. They follow the bar names, so they survive edits.</small>
         <ul id="ann-list" class="charts" aria-label="Annotations on this chart"></ul>

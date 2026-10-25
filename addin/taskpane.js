@@ -2,7 +2,7 @@
  * Task pane controller: pick a chart type, select a table -> preview -> insert/update a picture.
  * While the pane is open, charts re-render when their table changes.
  */
-import { MAX_ANNOTATIONS, renderChart } from "../engine/index.js";
+import { MAX_ANNOTATIONS, mergeNeeds, parseColumns, renderChart, scaleNeeds } from "../engine/index.js";
 import { bindAddress, deleteBinding, loadRecords, placeChart, pxToPt, readBinding, readSelection, resolveMode, saveRecords, vectorSupported, watchBinding, watchCalculation, } from "./excel.js";
 const $ = (id) => {
     const el = document.getElementById(id);
@@ -30,6 +30,9 @@ const ui = {
     varScale: $("opt-var-scale"),
     axisMax: $("opt-axis-max"),
     pins: $("opt-pins"),
+    total: $("opt-total"),
+    totalLabel: $("opt-total-label"),
+    scaleName: $("opt-scale-name"),
     bars: $("opt-bars"),
     annList: $("ann-list"),
     annType: $("ann-type"),
@@ -52,12 +55,15 @@ function tolerance(el) {
     return el.value.trim() === "" || el.validity.badInput ? Number.NaN : Number(el.value);
 }
 function chartType() {
-    return ui.chartType.value === "columns" ? "columns" : "bridge";
+    return ui.chartType.value === "columns" || ui.chartType.value === "multiples" ? ui.chartType.value : "bridge";
+}
+function typeOf(o) {
+    return o["chartType"] === "columns" || o["chartType"] === "multiples" ? o["chartType"] : "bridge";
 }
 /** Show only the fields that belong to the selected chart type. */
 function showFieldsFor(type) {
     document.querySelectorAll("[data-chart]").forEach((el) => {
-        el.hidden = el.dataset.chart !== type;
+        el.hidden = !(el.dataset.chart ?? "").split(" ").includes(type);
     });
 }
 function readOptions() {
@@ -71,8 +77,11 @@ function readOptions() {
         scale: Number(ui.scale.value),
         higherIsBetter: ui.higherIsBetter.checked,
     };
-    if (type === "columns") {
+    if (type === "columns" || type === "multiples") {
         const o = {
+            showTotal: ui.total.checked,
+            totalLabel: ui.totalLabel.value,
+            scaleName: type === "columns" ? ui.scaleName.value.trim() : "",
             units: ui.units.value,
             materialityPct: tolerance(ui.colMateriality),
             planStyle: ui.planStyle.value,
@@ -103,7 +112,7 @@ function writeOptions(o) {
         if (typeof v === "boolean")
             el.checked = v;
     };
-    const type = o["chartType"] === "columns" ? "columns" : "bridge";
+    const type = typeOf(o);
     ui.chartType.value = type;
     showFieldsFor(type);
     state.annotations = Array.isArray(o["annotations"]) ? o["annotations"].map((a) => ({ ...a })) : [];
@@ -113,7 +122,10 @@ function writeOptions(o) {
     set(ui.decimals, o["decimals"]);
     set(ui.scale, o["scale"]);
     check(ui.higherIsBetter, o["higherIsBetter"]);
-    if (type === "columns") {
+    if (type === "columns" || type === "multiples") {
+        check(ui.total, o["showTotal"]);
+        set(ui.totalLabel, o["totalLabel"]);
+        set(ui.scaleName, o["scaleName"]);
         set(ui.units, o["units"]);
         set(ui.colMateriality, o["materialityPct"]);
         set(ui.planStyle, o["planStyle"]);
@@ -156,11 +168,70 @@ async function busy(fn) {
 }
 /* ---------------- rendering ---------------- */
 function render(values, options) {
-    const type = options["chartType"] === "columns" ? "columns" : "bridge";
-    const out = renderChart(type, values, options);
+    const out = renderChart(typeOf(options), values, withSharedScale(options));
     if (!out.ok)
         return { result: null, error: out.error, warnings: [], labels: [] };
     return { result: out.result, error: "", warnings: out.warnings, labels: out.labels };
+}
+/* ---------------- shared (named) scales ---------------- */
+const SCALES_KEY = "ibcs.scales";
+function scaleKey(name) {
+    return name.trim().toLowerCase();
+}
+function loadScales() {
+    const raw = Office.context.document.settings.get(SCALES_KEY);
+    return raw && typeof raw === "object" ? raw : {};
+}
+/** Apply the stored ranges of the chart's named scale (preview and redraw use the same numbers). */
+function withSharedScale(options) {
+    const name = typeof options["scaleName"] === "string" ? options["scaleName"].trim() : "";
+    if (!name || typeOf(options) !== "columns")
+        return options;
+    const needs = loadScales()[scaleKey(name)];
+    if (!needs)
+        return options;
+    const own = Number(options["axisMax"]) || 0;
+    return { ...options, axisMax: Math.max(own, needs.max), pinRange: needs.pin, deltaRange: needs.delta };
+}
+/**
+ * Work out the common ranges of every chart that uses this scale name (reading each
+ * chart's table), store them, and report whether they changed, in which case the
+ * other charts must be redrawn so they stay comparable.
+ */
+async function refreshScale(name, current) {
+    const key = scaleKey(name);
+    const records = Object.values(loadRecords()).filter((r) => typeOf(r.options) === "columns" && scaleKey(String(r.options["scaleName"] ?? "")) === key);
+    const list = [];
+    const members = [];
+    const seen = new Set();
+    const add = (values, options) => {
+        const p = parseColumns(values, { ...options, axisMax: 0, pinRange: null, deltaRange: null });
+        if (p.ok)
+            list.push(scaleNeeds(p.model));
+    };
+    if (current) {
+        add(current.values, current.options);
+        seen.add(current.id);
+    }
+    for (const r of records) {
+        members.push(r.id);
+        if (seen.has(r.id))
+            continue;
+        const data = await readBinding(r.id);
+        if (data)
+            add(data.values, r.options);
+    }
+    if (!list.length)
+        return { changed: false, members };
+    const merged = mergeNeeds(list);
+    const scales = loadScales();
+    const changed = JSON.stringify(scales[key]) !== JSON.stringify(merged);
+    if (changed) {
+        scales[key] = merged;
+        Office.context.document.settings.set(SCALES_KEY, scales);
+        Office.context.document.settings.saveAsync(() => undefined);
+    }
+    return { changed, members };
 }
 /* ---------------- annotations ---------------- */
 function fillSelect(sel, labels, keep) {
@@ -243,7 +314,14 @@ async function svgToPngBase64(svg, width, height) {
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
     return canvas.toDataURL("image/png").split(",")[1] ?? "";
 }
-async function drawRecord(rec, values) {
+async function drawRecord(rec, values, cascade = true) {
+    const name = typeOf(rec.options) === "columns" ? String(rec.options["scaleName"] ?? "").trim() : "";
+    let others = [];
+    if (name) {
+        const s = await refreshScale(name, { id: rec.id, values, options: rec.options });
+        if (s.changed && cascade)
+            others = s.members.filter((id) => id !== rec.id);
+    }
     const { result, error, warnings } = render(values, rec.options);
     if (!result)
         throw new Error(`Chart not updated. ${error}`);
@@ -255,7 +333,16 @@ async function drawRecord(rec, values) {
         altTitle: result.title,
         altText: result.description,
     });
-    return { mode, warnings };
+    // The shared scale moved: redraw the other charts on it so they stay comparable.
+    for (const id of others) {
+        const other = loadRecords()[id];
+        const data = await readBinding(id);
+        if (!other || !data)
+            continue;
+        await drawRecord(other, data.values, false);
+        state.hashes.set(id, JSON.stringify([data.values, other.options, other.mode]));
+    }
+    return { mode, warnings: others.length ? [...warnings, `Shared scale "${name}" changed, so ${others.length} other chart${others.length > 1 ? "s were" : " was"} redrawn too.`] : warnings };
 }
 /* ---------------- live refresh ---------------- */
 const timers = new Map();
@@ -282,12 +369,13 @@ async function refreshOne(id, force) {
         const drawn = await drawRecord(rec, data.values);
         state.hashes.set(id, hash);
         fail("");
-        say(`Updated chart from ${data.address}.${drawn.warnings.length ? ` Check: ${drawn.warnings.join(" ")}` : ""}`);
         if (state.editingId === id) {
             state.values = data.values;
             state.address = data.address;
             updatePreview();
         }
+        // After the preview, so its "Previewing…" line does not overwrite what happened on the sheet.
+        say(`Updated chart from ${data.address}.${drawn.warnings.length ? ` Check: ${drawn.warnings.join(" ")}` : ""}`);
     });
 }
 async function watch(id) {
@@ -310,7 +398,7 @@ function renderList() {
     for (const rec of recs) {
         const li = document.createElement("li");
         const name = document.createElement("span");
-        const kind = rec.options["chartType"] === "columns" ? "Columns" : "Bridge";
+        const kind = { bridge: "Bridge", columns: "Columns", multiples: "Multiples" }[typeOf(rec.options)];
         name.textContent = `${kind}: ${String(rec.options["title"] || rec.id)}`;
         const edit = document.createElement("button");
         edit.type = "button";

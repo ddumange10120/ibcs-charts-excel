@@ -2,7 +2,7 @@
  * Marks and layout pieces shared by every chart type, so the notation is identical
  * everywhere (IBCS "Unify"): same fonts, same scenario fills, same exception colours.
  */
-import { THEME, hatchLines, rect, text } from "./svg.js";
+import { THEME, hatchLines, line, polygon, rect, text } from "./svg.js";
 import { textWidth, wrapText } from "./text.js";
 /** Font sizes in px at the 960 px design width. Large on purpose: these are read on screens and slides. */
 export const F = {
@@ -92,4 +92,41 @@ export function labelBox(x, baseline, content, size, bold = true, anchor = "midd
 /** Colour for an annotation line: exception colours, but dark grey (not pale grey) when within tolerance. */
 export function annotationColour(t) {
     return t === "neutral" ? THEME.ink2 : toneColour(t);
+}
+/** Break mark across a vertical column at y: a white slanted gap with two ink edges. */
+export function breakMarkV(xLeft, xRight, y) {
+    const o = 5;
+    const slant = 9;
+    const gap = 7;
+    const a = [xLeft - o, y];
+    const b = [xRight + o, y - slant];
+    return [
+        polygon([a, b, [b[0], b[1] - gap], [a[0], a[1] - gap]], { fill: THEME.surface }),
+        line(a[0], a[1], b[0], b[1], { stroke: THEME.ink, "stroke-width": 1.6 }),
+        line(a[0], a[1] - gap, b[0], b[1] - gap, { stroke: THEME.ink, "stroke-width": 1.6 }),
+    ];
+}
+/** 1-2-5 "nice" step at or below `raw`. */
+export function niceStep(raw) {
+    if (!(raw > 0))
+        return 1;
+    const exp = Math.floor(Math.log10(raw));
+    const base = 10 ** exp;
+    const m = raw / base;
+    return (m >= 5 ? 5 : m >= 2 ? 2 : 1) * base;
+}
+/** The IBCS-style legend for scenario notation (actual solid, forecast hatched, plan outlined or tick). */
+export function scenarioLegend(items, x, y, planAsTick) {
+    const out = [];
+    const names = { actual: "Actual (AC)", forecast: "Forecast (FC)", plan: "Plan (PL)" };
+    let lx = x;
+    for (const k of items) {
+        if (k === "plan" && planAsTick)
+            out.push(line(lx, y - 6, lx + 24, y - 6, { stroke: THEME.ink, "stroke-width": 3 }));
+        else
+            out.push(...scenarioBar(k, lx, y - 15, 24, 16));
+        out.push(text(lx + 32, y, names[k], { size: F.note }));
+        lx += 32 + textWidth(names[k], F.note) + 26;
+    }
+    return out;
 }

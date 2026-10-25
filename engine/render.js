@@ -8,7 +8,7 @@
  */
 import { assignLanes } from "./annotations.js";
 import { defaultSubtitle, defaultTitle, describe, formatPct, formatValue, } from "./bridge.js";
-import { F, PAD, annotationColour, clampLabel, header as drawHeader, labelBox, scenarioBar, tolerancePct, toneColour } from "./marks.js";
+import { F, PAD, annotationColour, breakMarkV, clampLabel, header as drawHeader, labelBox, scenarioBar, tolerancePct, toneColour } from "./marks.js";
 import { THEME, arrowhead, esc, line, polygon, polyline, rect, text } from "./svg.js";
 import { textWidth, wrapText } from "./text.js";
 /** Break mark across a horizontal bar at x: a white slanted gap with two ink edges. */
@@ -25,18 +25,6 @@ function breakMarkH(x, yTop, yBot) {
     ];
 }
 /** Break mark across a vertical column at y. */
-function breakMarkV(xLeft, xRight, y) {
-    const o = 5;
-    const slant = 9;
-    const gap = 7;
-    const a = [xLeft - o, y];
-    const b = [xRight + o, y - slant];
-    return [
-        polygon([a, b, [b[0], b[1] - gap], [a[0], a[1] - gap]], { fill: THEME.surface }),
-        line(a[0], a[1], b[0], b[1], { stroke: THEME.ink, "stroke-width": 1.6 }),
-        line(a[0], a[1] - gap, b[0], b[1] - gap, { stroke: THEME.ink, "stroke-width": 1.6 }),
-    ];
-}
 function header(m, width) {
     const title = m.options.title.trim() || defaultTitle(m);
     const subtitle = m.options.subtitle.trim() || defaultSubtitle(m);

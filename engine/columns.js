@@ -25,6 +25,11 @@ export const DEFAULT_COLUMN_OPTIONS = {
     showPctPins: true,
     showVarianceBars: true,
     annotations: [],
+    showTotal: false,
+    totalLabel: "FY",
+    scaleName: "",
+    pinRange: null,
+    deltaRange: null,
 };
 const ROLE = {
     ac: "ac", act: "ac", actual: "ac", actuals: "ac",
@@ -153,18 +158,56 @@ export function parseColumns(values, partial = {}) {
             warnings.push(`Rounded ΔPL labels add up to ${shown.toFixed(options.decimals)}, the total ΔPL is ${delta.toFixed(options.decimals)}. Show one more decimal if that matters.`);
         }
     }
-    const ann = resolveAnnotations(options.annotations, periods.map((p) => p.label), "period");
+    const totalTone = pctTone(deltaPct, options);
+    const totalLabel = options.totalLabel.trim() || "Total";
+    const total = options.showTotal
+        ? { label: totalLabel, kind: periods.some((p) => p.kind === "forecast") ? "forecast" : "actual", value, plan, delta, deltaPct, tone: totalTone, sourceRow: 0, isTotal: true }
+        : null;
+    if (total && periods.some((p) => p.label.trim().toLowerCase() === totalLabel.toLowerCase())) {
+        warnings.push(`A period is already called "${totalLabel}"; rename the total column so annotations can tell them apart.`);
+    }
+    const barLabels = [...periods.map((p) => p.label), ...(total ? [total.label] : [])];
+    const ann = resolveAnnotations(options.annotations, barLabels, "period");
     warnings.push(...ann.warnings);
+    const annotations = ann.resolved.filter((a) => {
+        if (a.spec.type === "bracket" && total && (a.i === periods.length || a.j === periods.length)) {
+            warnings.push(`Annotation ${a.n} (bracket ${a.spec.from} \u2192 ${a.spec.to}) includes the total column; a bracket covers periods only, so it was left out.`);
+            return false;
+        }
+        return true;
+    });
     return {
         ok: true,
         model: {
             periods,
             hasPlan,
-            totals: { value, plan, delta, deltaPct, tone: pctTone(deltaPct, options) },
+            totals: { value, plan, delta, deltaPct, tone: totalTone },
             firstForecast: periods.findIndex((p) => p.kind === "forecast"),
-            annotations: ann.resolved,
+            annotations,
+            total,
             options,
             warnings,
         },
+    };
+}
+export function scaleNeeds(m) {
+    const vals = m.periods.flatMap((p) => (p.plan === null ? [p.value] : [p.value, p.plan]));
+    const pcts = m.periods.map((p) => p.deltaPct).filter((x) => x !== null);
+    if (m.total?.deltaPct !== null && m.total?.deltaPct !== undefined)
+        pcts.push(m.total.deltaPct);
+    const deltas = m.periods.map((p) => p.delta).filter((x) => x !== null);
+    return {
+        max: Math.max(0, ...vals),
+        min: Math.min(0, ...vals),
+        pin: [Math.min(0, ...pcts), Math.max(0, ...pcts)],
+        delta: [Math.min(0, ...deltas), Math.max(0, ...deltas)],
+    };
+}
+export function mergeNeeds(list) {
+    return {
+        max: Math.max(0, ...list.map((n) => n.max)),
+        min: Math.min(0, ...list.map((n) => n.min)),
+        pin: [Math.min(0, ...list.map((n) => n.pin[0])), Math.max(0, ...list.map((n) => n.pin[1]))],
+        delta: [Math.min(0, ...list.map((n) => n.delta[0])), Math.max(0, ...list.map((n) => n.delta[1]))],
     };
 }

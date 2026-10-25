@@ -7,38 +7,9 @@
  * and the bar direction carry the same information as the colour).
  */
 import { defaultSubtitle, defaultTitle, describe, formatPct, formatValue, } from "./bridge.js";
-import { THEME, arrowhead, esc, hatchLines, line, polygon, polyline, rect, text } from "./svg.js";
+import { F, PAD, clampLabel, header as drawHeader, scenarioBar, toneColour } from "./marks.js";
+import { THEME, arrowhead, esc, line, polygon, polyline, rect, text } from "./svg.js";
 import { textWidth, wrapText } from "./text.js";
-const F = {
-    title: 26,
-    subtitle: 20,
-    category: 21,
-    value: 21,
-    annotation: 20,
-    note: 17,
-};
-const PAD = 18;
-function toneColour(t) {
-    return t === "adverse" ? THEME.adverse : t === "favourable" ? THEME.favourable : THEME.neutral;
-}
-/** A total bar in IBCS notation. Coordinates are the bar's rectangle. */
-function totalBar(row, x, y, w, h) {
-    const out = [];
-    if (row.kind === "actual") {
-        out.push(rect(x, y, w, h, { fill: THEME.actual }));
-    }
-    else if (row.kind === "forecast") {
-        out.push(rect(x, y, w, h, { fill: THEME.surface }));
-        // Hatch inside the outline (inset) so line ends never poke out past the border.
-        out.push(...hatchLines(x + 1.6, y + 1.6, x + w - 1.6, y + h - 1.6, 9, { stroke: THEME.actual, "stroke-width": 1.6 }));
-        out.push(rect(x + 0.8, y + 0.8, w - 1.6, h - 1.6, { fill: "none", stroke: THEME.actual, "stroke-width": 1.6 }));
-    }
-    else {
-        // plan: outlined. Inset by half the stroke so the outline stays inside the bar.
-        out.push(rect(x + 1, y + 1, w - 2, h - 2, { fill: THEME.surface, stroke: THEME.ink, "stroke-width": 2 }));
-    }
-    return out;
-}
 /** Break mark across a horizontal bar at x: a white slanted gap with two ink edges. */
 function breakMarkH(x, yTop, yBot) {
     const o = 5;
@@ -68,31 +39,12 @@ function breakMarkV(xLeft, xRight, y) {
 function header(m, width) {
     const title = m.options.title.trim() || defaultTitle(m);
     const subtitle = m.options.subtitle.trim() || defaultSubtitle(m);
-    const parts = [];
-    let y = PAD + F.title; // baseline of the first title line
-    const titleLines = wrapText(title, F.title, width - 2 * PAD, true);
-    titleLines.forEach((l, i) => {
-        if (i > 0)
-            y += F.title + 7;
-        parts.push(text(PAD, y, l, { size: F.title, bold: true }));
-    });
-    for (const l of wrapText(subtitle, F.subtitle, width - 2 * PAD)) {
-        y += F.subtitle + 9;
-        parts.push(text(PAD, y, l, { size: F.subtitle, fill: THEME.ink2 }));
-    }
-    return { parts, bottom: y + 24, title };
+    return { ...drawHeader(title, subtitle, width), title };
 }
 function footerNote(m) {
     if (!m.window.broken)
         return null;
     return `Totals are broken: the value axis starts at ${formatValue(m.window.min, m.options)}. Steps are to scale.`;
-}
-function clampLabel(lines, max) {
-    if (lines.length <= max)
-        return lines;
-    const kept = lines.slice(0, max);
-    kept[max - 1] = `${kept[max - 1]}…`;
-    return kept;
 }
 /* ------------------------------------------------------------------ */
 /* Horizontal                                                          */
@@ -150,7 +102,7 @@ function renderHorizontal(m, width) {
         else {
             const a = x(Math.min(base, r.value));
             const b = x(Math.max(base, r.value));
-            body.push(...totalBar(r, a, y0, b - a, barH));
+            body.push(...scenarioBar(r.kind, a, y0, b - a, barH));
             if (broken && b - a > 40)
                 body.push(...breakMarkH(a + 20, y0, y0 + barH));
         }
@@ -257,7 +209,7 @@ function renderVertical(m, width) {
         else {
             const ya = y(Math.max(base, r.value));
             const yb = y(Math.min(base, r.value));
-            body.push(...totalBar(r, x0, ya, colW, yb - ya));
+            body.push(...scenarioBar(r.kind, x0, ya, colW, yb - ya));
             if (broken && yb - ya > 40)
                 body.push(...breakMarkV(x0, x0 + colW, yb - 16));
             body.push(text(cx, ya - 9, label, { size: F.value, anchor: "middle", bold: true }));

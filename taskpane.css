@@ -91,3 +91,6 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .charts li { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .charts li button { min-height: 32px; padding: 4px 12px; background: var(--surface-2); color: var(--ink); border: 1px solid var(--line); }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+[hidden] { display: none !important; }
+.stack { display: grid; gap: 4px; }

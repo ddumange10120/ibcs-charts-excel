@@ -29,12 +29,19 @@ export function saveRecords(records) {
     });
 }
 /* ---------------- reading data ---------------- */
+/**
+ * Labels (first column) are read as the text Excel DISPLAYS, so a month stored as a
+ * date shows "Jan-26", not the serial number 46023. Numbers stay as values.
+ */
+export function withTextLabels(values, text) {
+    return values.map((row, i) => (row.length ? [text[i]?.[0] ?? row[0] ?? null, ...row.slice(1)] : row));
+}
 export async function readSelection() {
     return Excel.run(async (ctx) => {
         const r = ctx.workbook.getSelectedRange();
-        r.load("values,address");
+        r.load("values,text,address");
         await ctx.sync();
-        return { values: r.values, address: r.address };
+        return { values: withTextLabels(r.values, r.text), address: r.address };
     });
 }
 export async function readBinding(id) {
@@ -44,9 +51,9 @@ export async function readBinding(id) {
         if (b.isNullObject)
             return null;
         const r = b.getRange();
-        r.load("values,address");
+        r.load("values,text,address");
         await ctx.sync();
-        return { values: r.values, address: r.address };
+        return { values: withTextLabels(r.values, r.text), address: r.address };
     });
 }
 /** Split "Sheet1!A1:D8" or "'My sheet'!A1:D8" into sheet name and local address. */

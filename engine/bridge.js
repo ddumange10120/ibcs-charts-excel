@@ -4,6 +4,8 @@
  *
  * Pure functions only: no DOM, no Office.js. Rendering lives in render.ts.
  */
+import { toneOf } from "./marks.js";
+export { toneOf } from "./marks.js";
 export const DEFAULT_OPTIONS = {
     orientation: "horizontal",
     title: "",
@@ -43,11 +45,6 @@ function parseKind(cell) {
         return null;
     const key = String(cell).trim().toLowerCase();
     return KIND_SYNONYMS[key] ?? "invalid";
-}
-export function toneOf(delta, threshold, higherIsBetter) {
-    if (Math.abs(delta) < threshold || delta === 0)
-        return "neutral";
-    return delta > 0 === higherIsBetter ? "favourable" : "adverse";
 }
 /** Round to `decimals` the way the label will show it (half away from zero). */
 export function roundTo(value, decimals) {

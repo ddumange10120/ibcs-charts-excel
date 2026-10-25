@@ -1,8 +1,8 @@
 /**
- * Task pane controller: select a table -> preview -> insert/update a bridge picture.
+ * Task pane controller: pick a chart type, select a table -> preview -> insert/update a picture.
  * While the pane is open, charts re-render when their table changes.
  */
-import { parseBridge, renderBridge } from "../engine/index.js";
+import { renderChart } from "../engine/index.js";
 import { bindAddress, deleteBinding, loadRecords, placeChart, pxToPt, readBinding, readSelection, resolveMode, saveRecords, vectorSupported, watchBinding, watchCalculation, } from "./excel.js";
 const $ = (id) => {
     const el = document.getElementById(id);
@@ -13,6 +13,7 @@ const $ = (id) => {
 const ui = {
     source: $("source"),
     useSelection: $("use-selection"),
+    chartType: $("opt-type"),
     title: $("opt-title"),
     subtitle: $("opt-subtitle"),
     prefix: $("opt-prefix"),
@@ -23,6 +24,13 @@ const ui = {
     higherIsBetter: $("opt-higher"),
     breakAxis: $("opt-break"),
     gapArrow: $("opt-gap"),
+    units: $("opt-units"),
+    colMateriality: $("opt-col-materiality"),
+    planStyle: $("opt-plan-style"),
+    varScale: $("opt-var-scale"),
+    axisMax: $("opt-axis-max"),
+    pins: $("opt-pins"),
+    bars: $("opt-bars"),
     mode: $("opt-mode"),
     preview: $("preview"),
     status: $("status"),
@@ -33,43 +41,84 @@ const ui = {
     form: $("options"),
 };
 const state = { values: null, address: "", editingId: null, last: null, hashes: new Map(), watched: new Set() };
-/* ---------------- options <-> form ---------------- */
+function chartType() {
+    return ui.chartType.value === "columns" ? "columns" : "bridge";
+}
+/** Show only the fields that belong to the selected chart type. */
+function showFieldsFor(type) {
+    document.querySelectorAll("[data-chart]").forEach((el) => {
+        el.hidden = el.dataset.chart !== type;
+    });
+}
 function readOptions() {
-    const orientation = (ui.form.querySelector('input[name="orientation"]:checked')?.value ?? "horizontal");
-    return {
-        orientation,
+    const type = chartType();
+    const common = {
+        chartType: type,
         title: ui.title.value,
         subtitle: ui.subtitle.value,
-        prefix: ui.prefix.value,
-        suffix: ui.suffix.value,
         decimals: Number(ui.decimals.value),
         scale: Number(ui.scale.value),
-        materialityPct: Number(ui.materiality.value),
         higherIsBetter: ui.higherIsBetter.checked,
+    };
+    if (type === "columns") {
+        const o = {
+            units: ui.units.value,
+            materialityPct: Number(ui.colMateriality.value),
+            planStyle: ui.planStyle.value,
+            varianceScale: ui.varScale.value,
+            axisMax: Number(ui.axisMax.value) || 0,
+            showPctPins: ui.pins.checked,
+            showVarianceBars: ui.bars.checked,
+        };
+        return { ...common, ...o };
+    }
+    const orientation = (ui.form.querySelector('input[name="orientation"]:checked')?.value ?? "horizontal");
+    const b = {
+        orientation,
+        prefix: ui.prefix.value,
+        suffix: ui.suffix.value,
+        materialityPct: Number(ui.materiality.value),
         breakAxis: ui.breakAxis.value,
         showGapArrow: ui.gapArrow.checked,
     };
+    return { ...common, ...b };
 }
 function writeOptions(o) {
     const set = (el, v) => {
         if (v !== undefined && v !== null)
             el.value = String(v);
     };
-    set(ui.title, o.title);
-    set(ui.subtitle, o.subtitle);
-    set(ui.prefix, o.prefix);
-    set(ui.suffix, o.suffix);
-    set(ui.decimals, o.decimals);
-    set(ui.scale, o.scale);
-    set(ui.materiality, o.materialityPct);
-    set(ui.breakAxis, o.breakAxis);
-    if (o.higherIsBetter !== undefined)
-        ui.higherIsBetter.checked = o.higherIsBetter;
-    if (o.showGapArrow !== undefined)
-        ui.gapArrow.checked = o.showGapArrow;
-    const radio = ui.form.querySelector(`input[name="orientation"][value="${o.orientation ?? "horizontal"}"]`);
-    if (radio)
-        radio.checked = true;
+    const check = (el, v) => {
+        if (typeof v === "boolean")
+            el.checked = v;
+    };
+    const type = o["chartType"] === "columns" ? "columns" : "bridge";
+    ui.chartType.value = type;
+    showFieldsFor(type);
+    set(ui.title, o["title"]);
+    set(ui.subtitle, o["subtitle"]);
+    set(ui.decimals, o["decimals"]);
+    set(ui.scale, o["scale"]);
+    check(ui.higherIsBetter, o["higherIsBetter"]);
+    if (type === "columns") {
+        set(ui.units, o["units"]);
+        set(ui.colMateriality, o["materialityPct"]);
+        set(ui.planStyle, o["planStyle"]);
+        set(ui.varScale, o["varianceScale"]);
+        set(ui.axisMax, o["axisMax"]);
+        check(ui.pins, o["showPctPins"]);
+        check(ui.bars, o["showVarianceBars"]);
+    }
+    else {
+        set(ui.prefix, o["prefix"]);
+        set(ui.suffix, o["suffix"]);
+        set(ui.materiality, o["materialityPct"]);
+        set(ui.breakAxis, o["breakAxis"]);
+        check(ui.gapArrow, o["showGapArrow"]);
+        const radio = ui.form.querySelector(`input[name="orientation"][value="${String(o["orientation"] ?? "horizontal")}"]`);
+        if (radio)
+            radio.checked = true;
+    }
 }
 /* ---------------- messages ---------------- */
 function say(msg) {
@@ -94,10 +143,11 @@ async function busy(fn) {
 }
 /* ---------------- rendering ---------------- */
 function render(values, options) {
-    const parsed = parseBridge(values, options);
-    if (!parsed.ok)
-        return { result: null, error: parsed.error, warnings: [] };
-    return { result: renderBridge(parsed.model), error: "", warnings: parsed.model.warnings };
+    const type = options["chartType"] === "columns" ? "columns" : "bridge";
+    const out = renderChart(type, values, options);
+    if (!out.ok)
+        return { result: null, error: out.error, warnings: [] };
+    return { result: out.result, error: "", warnings: out.warnings };
 }
 function updatePreview() {
     if (!state.values) {
@@ -164,8 +214,11 @@ async function refreshOne(id, force) {
             return;
         }
         const hash = JSON.stringify([data.values, rec.options, rec.mode]);
-        if (!force && state.hashes.get(id) === hash)
+        if (!force && state.hashes.get(id) === hash) {
+            // Same data as the chart on the sheet (e.g. an edit was undone): it is valid, so clear any refusal.
+            fail("");
             return;
+        }
         await drawRecord(rec, data.values);
         state.hashes.set(id, hash);
         fail("");
@@ -197,7 +250,8 @@ function renderList() {
     for (const rec of recs) {
         const li = document.createElement("li");
         const name = document.createElement("span");
-        name.textContent = String(rec.options["title"] || rec.id);
+        const kind = rec.options["chartType"] === "columns" ? "Columns" : "Bridge";
+        name.textContent = `${kind}: ${String(rec.options["title"] || rec.id)}`;
         const edit = document.createElement("button");
         edit.type = "button";
         edit.textContent = "Edit";
@@ -284,6 +338,16 @@ ui.form.addEventListener("input", () => {
 });
 ui.form.addEventListener("submit", (e) => e.preventDefault());
 ui.useSelection.addEventListener("click", () => void useSelection());
+ui.chartType.addEventListener("change", () => {
+    showFieldsFor(chartType());
+    if (state.editingId) {
+        // Changing the type of an existing chart would rebind its meaning; start a new chart instead.
+        state.editingId = null;
+        ui.insert.textContent = "Insert chart";
+        ui.source.textContent = `Table: ${state.address} (new chart)`;
+    }
+    updatePreview();
+});
 ui.insert.addEventListener("click", () => void insertOrUpdate());
 ui.refreshAll.addEventListener("click", () => void refreshAll());
 Office.onReady(async (info) => {
@@ -302,6 +366,7 @@ Office.onReady(async (info) => {
         vectorOption.disabled = true;
         vectorOption.textContent += " (not available in this Excel)";
     }
+    showFieldsFor(chartType());
     renderList();
     await busy(async () => {
         for (const id of Object.keys(loadRecords()))

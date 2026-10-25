@@ -19,8 +19,14 @@
     </header>
 
     <section aria-labelledby="h-data">
-      <h2 id="h-data">1. Table</h2>
-      <p class="hint">Columns: <b>Label</b> · <b>Value</b> · <b>Type</b> (Plan, Actual, Forecast, Step) · <b>Group</b> (optional). Leave the last total blank to compute it.</p>
+      <h2 id="h-data">1. Chart and table</h2>
+      <label for="opt-type">Chart type</label>
+      <select id="opt-type">
+        <option value="bridge" selected>Bridge (plan to outlook)</option>
+        <option value="columns">Columns with variances (by period)</option>
+      </select>
+      <p class="hint" data-chart="bridge">Columns: <b>Label</b> · <b>Value</b> · <b>Type</b> (Plan, Actual, Forecast, Step) · <b>Group</b> (optional). Leave the last total blank to compute it.</p>
+      <p class="hint" data-chart="columns" hidden>One row per period: <b>Period</b> · <b>AC</b> · <b>FC</b> · <b>PL</b>. Fill AC for past periods and FC for future ones (never both). PL is optional but needed for variances.</p>
       <button type="button" id="use-selection" class="secondary">Use selection</button>
       <p id="source" class="source">No table selected yet.</p>
     </section>
@@ -30,9 +36,9 @@
       <label for="opt-title">Message title</label>
       <input id="opt-title" type="text" placeholder="Generated from the data if empty" autocomplete="off">
       <label for="opt-subtitle">Subtitle</label>
-      <input id="opt-subtitle" type="text" placeholder="Start to end, units" autocomplete="off">
+      <input id="opt-subtitle" type="text" placeholder="Generated from the data if empty" autocomplete="off">
 
-      <fieldset>
+      <fieldset data-chart="bridge">
         <legend>Orientation</legend>
         <label class="inline"><input type="radio" name="orientation" value="horizontal" checked> Horizontal</label>
         <label class="inline"><input type="radio" name="orientation" value="vertical"> Vertical</label>
@@ -40,8 +46,9 @@
 
       <fieldset class="grid">
         <legend>Numbers</legend>
-        <span><label for="opt-prefix">Prefix</label><input id="opt-prefix" type="text" value="$" size="3"></span>
-        <span><label for="opt-suffix">Suffix</label><input id="opt-suffix" type="text" value="M" size="3"></span>
+        <span data-chart="bridge"><label for="opt-prefix">Prefix</label><input id="opt-prefix" type="text" value="$" size="3"></span>
+        <span data-chart="bridge"><label for="opt-suffix">Suffix</label><input id="opt-suffix" type="text" value="M" size="3"></span>
+        <span data-chart="columns" hidden><label for="opt-units">Units (in subtitle)</label><input id="opt-units" type="text" value="$M" size="5"></span>
         <span><label for="opt-decimals">Decimals</label><input id="opt-decimals" type="number" min="0" max="4" step="1" value="1"></span>
         <span><label for="opt-scale">Cells hold</label>
           <select id="opt-scale">
@@ -53,16 +60,36 @@
 
       <fieldset>
         <legend>Colour and checks</legend>
-        <label class="inline"><input id="opt-higher" type="checkbox" checked> Higher is better (untick for cost bridges)</label>
-        <label for="opt-materiality">Grey below (% of start total)</label>
-        <input id="opt-materiality" type="number" min="0" max="100" step="0.5" value="1">
-        <label for="opt-break">Axis break</label>
+        <label class="inline"><input id="opt-higher" type="checkbox" checked> Higher is better (untick for costs)</label>
+        <span data-chart="bridge" class="stack"><label for="opt-materiality">Grey below (% of start total)</label>
+        <input id="opt-materiality" type="number" min="0" max="100" step="0.5" value="1"></span>
+        <span data-chart="columns" class="stack" hidden><label for="opt-col-materiality">Grey within ± (% of plan)</label>
+        <input id="opt-col-materiality" type="number" min="0" max="100" step="0.5" value="2"></span>
+        <span data-chart="bridge" class="stack"><label for="opt-break">Axis break</label>
         <select id="opt-break">
           <option value="auto" selected>Automatic</option>
           <option value="on">Always</option>
           <option value="off">Never (start at zero)</option>
+        </select></span>
+        <label class="inline" data-chart="bridge"><input id="opt-gap" type="checkbox" checked> Gap arrow between first and last total</label>
+      </fieldset>
+
+      <fieldset data-chart="columns" hidden>
+        <legend>Columns</legend>
+        <label for="opt-plan-style">Plan shown as</label>
+        <select id="opt-plan-style">
+          <option value="column" selected>Outlined column behind (IBCS standard)</option>
+          <option value="marker">Tick mark (many periods)</option>
         </select>
-        <label class="inline"><input id="opt-gap" type="checkbox" checked> Gap arrow between first and last total</label>
+        <label for="opt-var-scale">ΔPL bars scale</label>
+        <select id="opt-var-scale">
+          <option value="shared" selected>Same as the columns (honest)</option>
+          <option value="own">Magnified (states the factor)</option>
+        </select>
+        <label for="opt-axis-max">Axis maximum (0 = automatic)</label>
+        <input id="opt-axis-max" type="number" min="0" step="any" value="0">
+        <label class="inline"><input id="opt-pins" type="checkbox" checked> ΔPL% pins</label>
+        <label class="inline"><input id="opt-bars" type="checkbox" checked> ΔPL bars</label>
       </fieldset>
 
       <label for="opt-mode">Picture format</label>

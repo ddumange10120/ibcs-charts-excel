@@ -7,7 +7,7 @@
  * and the bar direction carry the same information as the colour).
  */
 import { defaultSubtitle, defaultTitle, describe, formatPct, formatValue, } from "./bridge.js";
-import { F, PAD, clampLabel, header as drawHeader, scenarioBar, toneColour } from "./marks.js";
+import { F, PAD, clampLabel, header as drawHeader, scenarioBar, tolerancePct, toneColour } from "./marks.js";
 import { THEME, arrowhead, esc, line, polygon, polyline, rect, text } from "./svg.js";
 import { textWidth, wrapText } from "./text.js";
 /** Break mark across a horizontal bar at x: a white slanted gap with two ink edges. */
@@ -41,10 +41,11 @@ function header(m, width) {
     const subtitle = m.options.subtitle.trim() || defaultSubtitle(m);
     return { ...drawHeader(title, subtitle, width), title };
 }
-function footerNote(m) {
-    if (!m.window.broken)
-        return null;
-    return `Totals are broken: the value axis starts at ${formatValue(m.window.min, m.options)}. Steps are to scale.`;
+function footerNotes(m) {
+    const notes = [`Grey = steps within ${tolerancePct(m.options.materialityPct)} of the start total. Red/blue = beyond it.`];
+    if (m.window.broken)
+        notes.push(`Totals are broken: the value axis starts at ${formatValue(m.window.min, m.options)}. Steps are to scale.`);
+    return notes;
 }
 /* ------------------------------------------------------------------ */
 /* Horizontal                                                          */
@@ -147,10 +148,12 @@ function renderHorizontal(m, width) {
         body.push(text(cx, dimY + 30, label, { size: F.annotation, bold: true, anchor: "middle" }));
         bottom = dimY + 30 + 8;
     }
-    const note = footerNote(m);
-    if (note) {
-        bottom += 30;
-        body.push(text(PAD, bottom, note, { size: F.note, fill: THEME.muted }));
+    bottom += 6;
+    for (const note of footerNotes(m)) {
+        for (const l of wrapText(note, F.note, width - 2 * PAD)) {
+            bottom += F.note + 9;
+            body.push(text(PAD, bottom, l, { size: F.note, fill: THEME.muted }));
+        }
     }
     return { body, height: Math.ceil(bottom + PAD), title };
 }
@@ -245,14 +248,12 @@ function renderVertical(m, width) {
     }
     const maxCat = Math.max(...catLines.map((l) => l.length));
     let bottom = plotBottom + 14 + maxCat * (catSize + 3);
-    const note = footerNote(m);
-    if (note) {
-        bottom += 30;
+    bottom += 6;
+    for (const note of footerNotes(m)) {
         for (const l of wrapText(note, F.note, width - 2 * PAD)) {
+            bottom += F.note + 9;
             body.push(text(PAD, bottom, l, { size: F.note, fill: THEME.muted }));
-            bottom += F.note + 5;
         }
-        bottom -= F.note + 5;
     }
     return { body, height: Math.ceil(bottom + PAD), title };
 }

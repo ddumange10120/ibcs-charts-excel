@@ -61,10 +61,12 @@
       <fieldset>
         <legend>Colour and checks</legend>
         <label class="inline"><input id="opt-higher" type="checkbox" checked> Higher is better (untick for costs)</label>
-        <span data-chart="bridge" class="stack"><label for="opt-materiality">Grey below (% of start total)</label>
-        <input id="opt-materiality" type="number" min="0" max="100" step="0.5" value="1"></span>
-        <span data-chart="columns" class="stack" hidden><label for="opt-col-materiality">Grey within ± (% of plan)</label>
-        <input id="opt-col-materiality" type="number" min="0" max="100" step="0.5" value="2"></span>
+        <span data-chart="bridge" class="stack"><label for="opt-materiality">Tolerance ±%</label>
+        <input id="opt-materiality" type="number" min="0" max="50" step="0.1" value="1" inputmode="decimal" aria-describedby="tol-hint-bridge">
+        <small id="tol-hint-bridge" class="hint">Steps within ± this % of the start total stay grey. 0 to 50; 0 colours every step.</small></span>
+        <span data-chart="columns" class="stack" hidden><label for="opt-col-materiality">Tolerance ±%</label>
+        <input id="opt-col-materiality" type="number" min="0" max="50" step="0.1" value="2" inputmode="decimal" aria-describedby="tol-hint-columns">
+        <small id="tol-hint-columns" class="hint">Variances within ± this % of plan stay grey. 0 to 50; 0 colours every variance.</small></span>
         <span data-chart="bridge" class="stack"><label for="opt-break">Axis break</label>
         <select id="opt-break">
           <option value="auto" selected>Automatic</option>

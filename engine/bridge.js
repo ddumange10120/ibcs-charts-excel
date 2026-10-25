@@ -4,7 +4,7 @@
  *
  * Pure functions only: no DOM, no Office.js. Rendering lives in render.ts.
  */
-import { toneOf } from "./marks.js";
+import { toleranceError, toneOf } from "./marks.js";
 export { toneOf } from "./marks.js";
 export const DEFAULT_OPTIONS = {
     orientation: "horizontal",
@@ -92,6 +92,9 @@ export function parseBridge(values, partial = {}) {
     const options = { ...DEFAULT_OPTIONS, ...partial };
     if (!(options.scale > 0))
         return { ok: false, error: "Scale must be a positive number." };
+    const tolErr = toleranceError(options.materialityPct);
+    if (tolErr)
+        return { ok: false, error: tolErr };
     const decimals = Math.max(0, Math.min(4, Math.round(options.decimals)));
     options.decimals = decimals;
     const rowsIn = values.filter((r) => r.some((c) => !isBlank(c)));

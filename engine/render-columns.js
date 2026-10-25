@@ -9,7 +9,7 @@
  */
 import {} from "./columns.js";
 import { formatPct, roundTo } from "./bridge.js";
-import { F, PAD, clampLabel, header, scenarioBar, toneColour } from "./marks.js";
+import { F, PAD, clampLabel, header, scenarioBar, tolerancePct, toneColour } from "./marks.js";
 import { THEME, esc, line, rect, text } from "./svg.js";
 import { textWidth, wrapText } from "./text.js";
 const num = (v, d, signed = false) => {
@@ -213,7 +213,7 @@ export function renderColumns(m, r = {}) {
     // ---- footnotes
     let bottom = catBottom + 8;
     if (m.hasPlan)
-        notes.unshift(`Grey: within ±${o.materialityPct}% of plan. Red/blue: beyond it.`);
+        notes.unshift(`Grey = within ${tolerancePct(o.materialityPct)} of plan. Red/blue = beyond it.`);
     for (const nline of notes) {
         for (const l of wrapText(nline, F.note, width - 2 * PAD)) {
             bottom += F.note + 9;

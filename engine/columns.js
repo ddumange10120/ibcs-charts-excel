@@ -8,7 +8,7 @@
  * Column order is read from the header row (AC/Actual, FC/Forecast/LE/Outlook,
  * PL/Plan/Budget/OP); without a header the order AC, FC, PL is assumed.
  */
-import { toneOf } from "./marks.js";
+import { toleranceError, toneOf } from "./marks.js";
 import { roundTo } from "./bridge.js";
 export const DEFAULT_COLUMN_OPTIONS = {
     title: "",
@@ -51,7 +51,7 @@ function roleOf(header) {
     const w = String(header).trim().toLowerCase().split(/[^a-z]+/).filter(Boolean)[0] ?? "";
     return ROLE[w] ?? null;
 }
-/** Brief §6: monthly ΔPL is coloured only OUTSIDE ±materiality, so exactly ±2% stays grey. */
+/** Brief §6: ΔPL is coloured only OUTSIDE ±tolerance, so exactly at the tolerance stays grey. */
 function pctTone(pct, o) {
     if (pct === null || Math.abs(pct) <= o.materialityPct)
         return "neutral";
@@ -61,6 +61,9 @@ export function parseColumns(values, partial = {}) {
     const options = { ...DEFAULT_COLUMN_OPTIONS, ...partial };
     if (!(options.scale > 0))
         return { ok: false, error: "Scale must be a positive number." };
+    const tolErr = toleranceError(options.materialityPct);
+    if (tolErr)
+        return { ok: false, error: tolErr };
     options.decimals = Math.max(0, Math.min(4, Math.round(options.decimals)));
     const rows = values.filter((r) => r.some((c) => !isBlank(c)));
     if (rows.length === 0)

@@ -17,10 +17,26 @@ export const PAD = 18;
 export function toneColour(t) {
     return t === "adverse" ? THEME.adverse : t === "favourable" ? THEME.favourable : THEME.neutral;
 }
+/** Exactly at the tolerance counts as within (grey). A tolerance of 0 colours every non-zero variance. */
 export function toneOf(delta, threshold, higherIsBetter) {
-    if (Math.abs(delta) < threshold || delta === 0)
+    if (delta === 0 || Math.abs(delta) <= threshold)
         return "neutral";
     return delta > 0 === higherIsBetter ? "favourable" : "adverse";
+}
+export const TOLERANCE_MIN = 0;
+export const TOLERANCE_MAX = 50;
+/** The tolerance is a user setting: 0 to 50 %, decimals allowed. Returns an error message or null. */
+export function toleranceError(pct) {
+    const n = typeof pct === "number" ? pct : Number.NaN;
+    if (!Number.isFinite(n) || n < TOLERANCE_MIN || n > TOLERANCE_MAX) {
+        const got = Number.isNaN(n) ? "an empty or non-numeric value" : `"${String(pct)}"`;
+        return `Tolerance \u00b1% must be a number from ${TOLERANCE_MIN} to ${TOLERANCE_MAX} (decimals allowed); got ${got}.`;
+    }
+    return null;
+}
+/** "±2.0%": one decimal, so a tolerance of 2.5 and of 2 read differently. */
+export function tolerancePct(pct) {
+    return `\u00b1${pct.toFixed(Math.abs(pct * 10 - Math.round(pct * 10)) > 1e-9 ? 2 : 1)}%`;
 }
 /** A bar in IBCS scenario notation: actual solid, forecast hatched, plan outlined. */
 export function scenarioBar(kind, x, y, w, h) {

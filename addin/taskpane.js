@@ -41,6 +41,10 @@ const ui = {
     form: $("options"),
 };
 const state = { values: null, address: "", editingId: null, last: null, hashes: new Map(), watched: new Set() };
+/** An empty or non-numeric box must fail validation, never silently become 0. */
+function tolerance(el) {
+    return el.value.trim() === "" || el.validity.badInput ? Number.NaN : Number(el.value);
+}
 function chartType() {
     return ui.chartType.value === "columns" ? "columns" : "bridge";
 }
@@ -63,7 +67,7 @@ function readOptions() {
     if (type === "columns") {
         const o = {
             units: ui.units.value,
-            materialityPct: Number(ui.colMateriality.value),
+            materialityPct: tolerance(ui.colMateriality),
             planStyle: ui.planStyle.value,
             varianceScale: ui.varScale.value,
             axisMax: Number(ui.axisMax.value) || 0,
@@ -77,7 +81,7 @@ function readOptions() {
         orientation,
         prefix: ui.prefix.value,
         suffix: ui.suffix.value,
-        materialityPct: Number(ui.materiality.value),
+        materialityPct: tolerance(ui.materiality),
         breakAxis: ui.breakAxis.value,
         showGapArrow: ui.gapArrow.checked,
     };
